@@ -95,6 +95,7 @@ CONTAINS
         ! Peak Shaving
         IF (CntrPar%PS_Mode == 1) THEN
             LocalVar%PC_MinPit = PitchSaturation(LocalVar,CntrPar,objInst)
+            LocalVar%PC_MinPit = max(LocalVar%PC_MinPit, CntrPar%PC_MinPit)
         ELSE
             LocalVar%PC_MinPit = CntrPar%PC_MinPit
         ENDIF
@@ -151,8 +152,8 @@ CONTAINS
         IF (LocalVar%VS_State == 4) THEN
             VS_MaxTq = CntrPar%VS_RtTq
         ELSE
-            VS_MaxTq = CntrPar%VS_MaxTq           ! NJA: May want to boost max torque
-            ! VS_MaxTq = CntrPar%VS_RtTq
+            ! VS_MaxTq = CntrPar%VS_MaxTq           ! NJA: May want to boost max torque
+            VS_MaxTq = CntrPar%VS_RtTq
         ENDIF
 
         ! Optimal Tip-Speed-Ratio tracking controller
@@ -358,12 +359,11 @@ CONTAINS
         TYPE(LocalVariables), INTENT(INOUT)     :: LocalVar 
         TYPE(ObjectInstances), INTENT(INOUT)    :: objInst
         ! Allocate Variables 
-        REAL(4)                      :: NACIMU_FA_AccF ! Low-pass filtered tower fore-aft acceleration
         REAL(4)                      :: NacIMU_FA_vel ! Tower fore-aft velocity
         
         ! Calculate floating contribution to pitch command
         NacIMU_FA_vel = PIController(LocalVar%NacIMU_FA_AccF, 0.0, 1.0, -100.0 , 100.0 ,LocalVar%DT, 0.0, .FALSE., objInst%instPI) ! NJA: should never reach saturation limits....
-        LocalVar%Fl_PitCom = (0.0 - NacIMU_FA_vel) * CntrPar%FL_Kp
+        LocalVar%Fl_PitCom = (0.0 - NacIMU_FA_vel) * CntrPar%FL_Kp !* LocalVar%PC_KP/maxval(CntrPar%PC_GS_KP)
 
     END SUBROUTINE FloatingFeedback
 !-------------------------------------------------------------------------------------------------------------------------------
@@ -387,41 +387,52 @@ CONTAINS
         REAL(4)                                   :: RootMyb_VelErr(3)
 
         ! Flap control
-        IF (CntrPar%Flp_Mode > 1) THEN
-            IF ((LocalVar%iStatus == 0) .and. (CntrPar%Flp_Mode == 1)) THEN
+        IF (CntrPar%Flp_Mode >= 1) THEN
+            IF ((LocalVar%iStatus == 0) .AND. (CntrPar%Flp_Mode >= 1)) THEN
                 RootMyb_Last(1) = 0 - LocalVar%rootMOOP(1)
                 RootMyb_Last(2) = 0 - LocalVar%rootMOOP(2)
                 RootMyb_Last(3) = 0 - LocalVar%rootMOOP(3)
-            ELSEIF (CntrPar%Flp_Mode == 1) THEN
+                ! Initial Flap angle
                 LocalVar%Flp_Angle(1) = CntrPar%Flp_Angle
                 LocalVar%Flp_Angle(2) = CntrPar%Flp_Angle
                 LocalVar%Flp_Angle(3) = CntrPar%Flp_Angle
+                ! Initialize filter
+                RootMOOP_F(K) = SecLPFilter(LocalVar%rootMOOP(K),LocalVar%DT, CntrPar%F_FlpCornerFreq, CntrPar%F_FlpDamping, LocalVar%iStatus, .FALSE.,objInst%instLPF)
+            ! Steady flap angle
+            ELSEIF (CntrPar%Flp_Mode == 1) THEN
+                LocalVar%Flp_Angle(1) = LocalVar%Flp_Angle(1) 
+                LocalVar%Flp_Angle(2) = LocalVar%Flp_Angle(2) 
+                LocalVar%Flp_Angle(3) = LocalVar%Flp_Angle(3) 
                 ! IF (MOD(LocalVar%Time,10.0) == 0) THEN
-                !     LocalVar%Flp_Angle(1) = LocalVar%Flp_Angle(1) + 1
-                !     LocalVar%Flp_Angle(2) = LocalVar%Flp_Angle(2) + 1
-                !     LocalVar%Flp_Angle(3) = LocalVar%Flp_Angle(3) + 1
+                !     LocalVar%Flp_Angle(1) = LocalVar%Flp_Angle(1) + 1*D2R
+                !     LocalVar%Flp_Angle(2) = LocalVar%Flp_Angle(2) + 1*D2R
+                !     LocalVar%Flp_Angle(3) = LocalVar%Flp_Angle(3) + 1*D2R
                 ! ENDIF
+
+            ! PII flap control
             ELSEIF (CntrPar%Flp_Mode == 2) THEN
                 DO K = 1,3
-                    ! LPF Blade root bending moment (tau = 0.1, critically damped to attempt to mitigate phase delays)
-                    RootMOOP_F(K) = SecLPFilter(LocalVar%rootMOOP(K),LocalVar%DT,62.8319, 0.7,LocalVar%iStatus, .FALSE.,objInst%instLPF)
+                    ! LPF Blade root bending moment
+                    RootMOOP_F(K) = SecLPFilter(LocalVar%rootMOOP(K),LocalVar%DT, CntrPar%F_FlpCornerFreq, CntrPar%F_FlpDamping, LocalVar%iStatus, .FALSE.,objInst%instLPF)
+                    
                     ! Find derivative and derivative error of blade root bending moment
                     RootMyb_Vel(K) = (RootMOOP_F(K) - RootMyb_Last(K))/LocalVar%DT
-                    RootMyb_VelErr(K) = 0 - RootMyb_Vel(K)!LocalVar%rootMOOP(K)
-                    ! Find flap angle
-                    ! LocalVar%Flp_Angle(K) = PIController(RootMyb_VelErr(K), CntrPar%Flp_Kp, CntrPar%Flp_Ki, -10.0, 10.0, LocalVar%DT, 0.0, .FALSE., objInst%instPI)
-                    LocalVar%Flp_Angle(K) = PIIController(RootMyb_VelErr(K), 0 - LocalVar%Flp_Angle(K), CntrPar%Flp_Kp, CntrPar%Flp_Ki, 0.05, -10.0, 10.0, LocalVar%DT, 0.0, .FALSE., objInst%instPI)
-                    ! Add some integral gain to encourage zero flap angle
-                    ! LocalVar%Flp_Angle(K) = LocalVar%Flp_Angle(K) + PIController(0 - LocalVar%Flp_Angle(K), 0.0, 0.01, -10.0, 10.0, LocalVar%DT, 0.0, .FALSE., objInst%instPI)
+                    RootMyb_VelErr(K) = 0 - RootMyb_Vel(K)
+                    
+                    ! Find flap angle command - includes an integral term to encourage zero flap angle
+                    LocalVar%Flp_Angle(K) = PIIController(RootMyb_VelErr(K), 0 - LocalVar%Flp_Angle(K), CntrPar%Flp_Kp, CntrPar%Flp_Ki, 0.05, -10.0*D2R, 10.0*D2R, LocalVar%DT, 0.0, .FALSE., objInst%instPI)
                     ! Saturation Limits
-                    ! LocalVar%Flp_Angle(K) = saturate(LocalVar%Flp_Angle(K),-10.0, 10.0)
+                    LocalVar%Flp_Angle(K) = saturate(LocalVar%Flp_Angle(K),-10.0, 10.0)
+                    
+                    ! Save some data for next iteration
                     RootMyb_Last(K) = RootMOOP_F(K)
                 ENDDO
             ENDIF
+
             ! Send to AVRSwap
-            avrSWAP(120) = LocalVar%Flp_Angle(1)
-            avrSWAP(121) = LocalVar%Flp_Angle(2)
-            avrSWAP(122) = LocalVar%Flp_Angle(3)
+            avrSWAP(120) = LocalVar%Flp_Angle(1) * R2D   ! Needs to be sent to openfast in degrees
+            avrSWAP(121) = LocalVar%Flp_Angle(2) * R2D   ! Needs to be sent to openfast in degrees
+            avrSWAP(122) = LocalVar%Flp_Angle(3) * R2D   ! Needs to be sent to openfast in degrees
         ELSE
             RETURN
         ENDIF

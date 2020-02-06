@@ -33,6 +33,8 @@ TYPE, PUBLIC :: ControlParameters
     Real(4)                             :: F_SSCornerFreq               ! Setpoint Smoother mode {0: no setpoint smoothing, 1: introduce setpoint smoothing}
     Real(4)                             :: F_FlCornerFreq               ! Corner frequency (-3dB point) in the second order low pass filter of the tower-top fore-aft motion for floating feedback control [rad/s].
     Real(4)                             :: F_FlDamping                  ! Damping constant in the first order low pass filter of the tower-top fore-aft motion for floating feedback control [-].
+    Real(4)                             :: F_FlpCornerFreq              ! Corner frequency (-3dB point) in the second order low pass filter of the blade root bending moment for flap control [rad/s].
+    Real(4)                             :: F_FlpDamping                 ! Damping constant in the first order low pass filter of the blade root bending moment for flap control[-].
 
     REAL(4)                             :: FA_HPFCornerFreq             ! Corner frequency (-3dB point) in the high-pass filter on the fore-aft acceleration signal [rad/s]
     REAL(4)                             :: FA_IntSat                    ! Integrator saturation (maximum signal amplitude contrbution to pitch from FA damper), [rad]
@@ -149,7 +151,7 @@ TYPE, PUBLIC :: LocalVariables
     REAL(4)                      :: Azimuth
     INTEGER(4)                   :: NumBl
     REAL(4)                      :: FA_Acc                       ! Tower fore-aft acceleration [m/s^2]
-    REAL(4)                      :: NacIMU_FA_Acc                       ! Tower fore-aft acceleration [m/s^2]
+    REAL(4)                      :: NacIMU_FA_Acc                       ! Tower fore-aft acceleration [rad/s^2]
 
     ! ---------- -Internal controller variables ----------
     REAL(4)                             :: FA_AccHPF                    ! High-pass filtered fore-aft acceleration [m/s^2]
