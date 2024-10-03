@@ -328,7 +328,7 @@ CONTAINS
                 WRITE( UnEc, *) 'Generated on '//CurDate()//' at '//CurTime()//' using ROSCO-'//TRIM(rosco_version)
                 WRITE( UnEc, *)  NEW_LINE('A')
                 WRITE( UnEc, *) 'Line Number',Tab,'Parameter',Tab,'Value'
-                WRITE( UnEc, *) '-----------------------------------------check'
+                WRITE( UnEc, *) '-----------------------------------------'
             ENDIF
         ENDIF
 
