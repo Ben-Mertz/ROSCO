@@ -5,7 +5,6 @@ channels:
 dependencies:
   - cmake
   - cmake-build-extension
-  - control
   - make
   - matplotlib
   - ninja
@@ -20,3 +19,8 @@ dependencies:
   - sphinx_rtd_theme
   - treon
   - wisdem >=3.16
+  - zeromq
+  - openfast=4.2
+  - openfast-io=4.2
+  - pip:
+    - control
